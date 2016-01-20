@@ -12,12 +12,14 @@ namespace frontier_stpath_basic_csharp {
 			// グラフ（隣接リスト）を標準入力から読み込む
 			string adj_text = "";
 			string line = Console.ReadLine();
-			while(line.Length > 0) {
+			while(line.Length > 0) {	// while(line != null)から変更
 				adj_text += line + "\n";
 				line = Console.ReadLine();
 			}
 			graph.ParseAdjListText(adj_text);　//隣接行列つくる
 
+			// グラフの特徴をもつクラス
+			//引数は(Graphクラス, グラフの始点, グラフの終点)
 			State state = new State(graph, 1, graph.GetNumberOfVertices());
 
 			// 入力グラフの頂点の数と辺の数を出力
@@ -184,9 +186,8 @@ namespace frontier_stpath_basic_csharp {
 		public void ParseAdjListText(string adj_list_text) {
 			edge_list.Clear();
 
-			// 行ごとに区切る
-			//改行コード毎に区切る
-			//改行コードはなくなる
+			// 改行コード毎(事実上の行)に区切る
+			// 改行コードはなくなる
 			string[] line = adj_list_text.Split(new string[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
 			// 各行について
 			for(int i = 0; i < line.Length; ++i) {
@@ -215,7 +216,7 @@ namespace frontier_stpath_basic_csharp {
 				}
 			}
 			// 頂点の最大番号を頂点数とする
-			//孤立点は含まれなくなる
+			// 孤立点は含まれなくなる
 			number_of_vertices = max_num; 
 		}
 
