@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace frontier_stpath_basic_csharp {
+namespace frontier_fourcells_csharp {
 	class Program {
 		static void Main(string[] args) {
 			Graph graph = new Graph();
@@ -55,7 +55,6 @@ namespace frontier_stpath_basic_csharp {
 				foreach(ZDDNode n_hat in N[i]) {
 					foreach(int x in ZeroOne) {
 						ZDDNode n_prime = CheckTerminal(n_hat, i, x, state);
-
 						if(n_prime == null) {
 							n_prime = n_hat.MakeCopy();
 							UpdateInfo(n_prime, i, x, state);
@@ -78,6 +77,31 @@ namespace frontier_stpath_basic_csharp {
 		private static ZDDNode CheckTerminal(ZDDNode n_hat, int i, int x, State state) {
 			Edge edge = state.graph.GetEdgeList()[i - 1];
 			if(x == 1) {
+				// 辺でつないだときに,それぞれの連結成分の要素数が4超え（フォーセルズ的に破綻）したら
+				if(n_hat.compCount[n_hat.comp[edge.src]] + n_hat.compCount[n_hat.comp[edge.dest]] > 4) {
+					// 同じ連結成分ならセーフ
+					if(n_hat.comp[edge.src] != n_hat.comp[edge.dest]) {
+						return ZDDNode.ZeroTerminal;
+					}
+				}
+				if(n_hat.mate[edge.src] != 0 || n_hat.mate[edge.dest] != 0) {
+					int src = n_hat.mate[edge.src];
+					int dest = n_hat.mate[edge.dest];
+					if(src == 0) {
+						src = edge.src;
+					}
+					if(dest == 0) {
+						dest = edge.dest;
+					}
+					foreach(Edge ed in state.graph.GetEdgeList()) {
+						if(ed.compare(src, dest)) {
+							return ZDDNode.ZeroTerminal;
+						}
+					}
+				}
+			}
+			else {
+				// 四角のブロックはループさせる
 				if(n_hat.comp[edge.src] == n_hat.comp[edge.dest]) {
 					return ZDDNode.ZeroTerminal;
 				}
@@ -85,47 +109,67 @@ namespace frontier_stpath_basic_csharp {
 			ZDDNode n_prime = n_hat.MakeCopy();
 			UpdateInfo(n_prime, i, x, state);
 			int[] src_dest = new int[] { edge.src, edge.dest };
+			bool check = false;
+			// フロンティアに関して
 			foreach(int u in src_dest) {
-				if((u == state.s || u == state.t) && n_prime.deg[u] > 1) {
-					return ZDDNode.ZeroTerminal;
-				}
-				else if((u != state.s && u != state.t) && n_prime.deg[u] > 2) {
-					return ZDDNode.ZeroTerminal;
-				}
-			}
-			foreach(int u in src_dest) {
+				// フロンティアを抜ける
 				if(!state.F[i].Contains(u)) {
-					if((u == state.s || u == state.t) && n_prime.deg[u] != 1) {
-						return ZDDNode.ZeroTerminal;
-					}
-					else if((u != state.s && u != state.t) && n_prime.deg[u] != 0 && n_prime.deg[u] != 2) {
-						return ZDDNode.ZeroTerminal;
+					if(n_prime.compCount[n_prime.comp[u]] < 4) {
+						check = false;
+						foreach(int f in state.F[i]) {
+							if(n_prime.comp[f] == n_prime.comp[u]) {
+								check = true;
+							}
+						}
+						if(!check) {
+							return ZDDNode.ZeroTerminal;
+						}
 					}
 				}
 			}
+			// 最後の辺まで処理を終えたなら
 			if(i == state.graph.GetEdgeList().Count) {
 				return ZDDNode.OneTerminal;
 			}
+			// 0終端か1終端かまだ判定がつかない中継ノード
 			return null;
 		}
 
 		private static void UpdateInfo(ZDDNode n_hat, int i, int x, State state) {
 			Edge edge = state.graph.GetEdgeList()[i - 1];
 			int[] src_dest = new int[] { edge.src, edge.dest };
-			foreach(int u in src_dest) {
-				if(!state.F[i - 1].Contains(u)) {
-					n_hat.deg[u] = 0;
-					n_hat.comp[u] = u;
-				}
-			}
+			// 初期化？
+			//foreach(int u in src_dest) {
+			//	if(!state.F[i - 1].Contains(u)) {
+			//		n_hat.deg[u] = 0;
+			//		n_hat.comp[u] = u;
+			//		n_hat.compCount[u] = 1;
+			//	}
+			//}
 			if(x == 1) {
+				// 次数の増加
 				++n_hat.deg[edge.src];
 				++n_hat.deg[edge.dest];
+				// 連結成分の変更
 				int c_min = Math.Min(n_hat.comp[edge.src], n_hat.comp[edge.dest]);
 				int c_max = Math.Max(n_hat.comp[edge.src], n_hat.comp[edge.dest]);
-				foreach(int u in state.F[i]) {
-					if(n_hat.comp[u] == c_max) {
-						n_hat.comp[u] = c_min;
+				if(c_min != c_max) {
+					n_hat.compCount[c_min] += n_hat.compCount[c_max];
+					foreach(int u in state.F[i]) {
+					//for(int u = 1; u <= state.t; ++u) {
+						if(n_hat.comp[u] == c_max) {
+							n_hat.comp[u] = c_min;
+							//n_hat.compCount[c_min]++;
+						}
+					}
+				}
+				// mate配列の更新
+				if(n_hat.mate[edge.dest] == 0) {
+					if(n_hat.mate[edge.src] == 0) {
+						n_hat.mate[edge.dest] = edge.src;
+					}
+					else {
+						n_hat.mate[edge.dest] = n_hat.mate[edge.src];
 					}
 				}
 			}
@@ -164,6 +208,15 @@ namespace frontier_stpath_basic_csharp {
 		public Edge(int src, int dest) {
 			this.src = src;
 			this.dest = dest;
+		}
+		public bool compare(int ver1, int ver2){
+			if(ver1 == 0 || ver2 == 0) {
+				return false;
+			}
+			if(src == ver1 && dest == ver2 || src == ver2 && dest == ver1){
+				return true;
+			}
+			return false;
 		}
 	}
 
@@ -217,7 +270,7 @@ namespace frontier_stpath_basic_csharp {
 			}
 			// 頂点の最大番号を頂点数とする
 			// 孤立点は含まれなくなる
-			number_of_vertices = max_num; 
+			number_of_vertices = max_num;
 		}
 
 		public override string ToString() {
@@ -235,6 +288,8 @@ namespace frontier_stpath_basic_csharp {
 	class ZDDNode {
 		public int[] deg;
 		public int[] comp;
+		public int[] compCount;
+		public int[] mate;
 		public long sol;
 		public ZDDNode zero_child;
 		public ZDDNode one_child;
@@ -268,18 +323,23 @@ namespace frontier_stpath_basic_csharp {
 			node.SetNextId();
 			node.deg = new int[number_of_vertices + 1];
 			node.comp = new int[number_of_vertices + 1];
-
+			node.compCount = new int[number_of_vertices + 1];
+			node.mate = new int[number_of_vertices + 1];
 			for(int i = 1; i <= number_of_vertices; ++i) {
 				node.deg[i] = 0;
 				node.comp[i] = i;
+				node.compCount[i] = 1;
+				node.mate[i] = 0;
 			}
 			return node;
 		}
 
 		public ZDDNode MakeCopy() {
 			ZDDNode node = new ZDDNode();
-			node.deg = (int[])deg.Clone();   // 配列のコピーを生成
+			node.deg = (int[])deg.Clone(); 
 			node.comp = (int[])comp.Clone();
+			node.compCount = (int[])compCount.Clone();
+			node.mate = (int[])mate.Clone();
 			return node;
 		}
 
